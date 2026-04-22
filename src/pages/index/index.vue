@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import { getIndexMaterial } from '@/api/index-material'
+import HeroCarousel from '@/components/HeroCarousel.vue'
+
+interface HomeCarouselItem {
+  id?: number | string
+  fileType: 0 | 1
+  videoUrl: string
+  poster: string
+  title: string
+  sub: string
+}
+
 defineOptions({ name: 'Home' })
 
 definePage({
@@ -9,39 +21,36 @@ definePage({
   },
 })
 
-const heroPoster = '/static/images/home/free_xfgz.png'
+const FALLBACK_ITEMS: HomeCarouselItem[] = []
 
-const heroVideoMeta = [
-  { title: '空房设计', sub: '一键生成效果图' },
-  { title: '现房改造', sub: '定制我的百变风格' },
-  { title: '软装换搭', sub: '精选家居随心换' },
-]
+const carouselItems = ref<HomeCarouselItem[]>(FALLBACK_ITEMS)
 
-const heroTextVisible = ref(true)
-
-const heroVideoPaths = [
-  '2026/2/b50d0444-jimeng-2026-02-05-6267-请基于我提供的首帧（毛坯客厅）和尾帧（装修效果图），生成一段时长5秒、帧率24f....mp4',
-  '2026/2/d42a4b35-jimeng-2026-01-14-5394-请基于我提供的首帧（毛坯客厅）和尾帧（装修效果图），生成一段时长5秒、帧率24f....mp4',
-  '2026/2/094647e9-jimeng-2026-02-06-2026-制作一个5秒的静镜头动画，展示北欧客厅从首帧到尾帧的软装变换过程。  关键指令：....mp4',
-]
-
-const heroVideoIndex = ref(0)
-const heroVideoReady = ref(false)
-const heroVideoErrorCount = ref(0)
-
-const heroTitle = computed(() => heroVideoMeta[heroVideoIndex.value]?.title ?? '')
-const heroSub = computed(() => heroVideoMeta[heroVideoIndex.value]?.sub ?? '')
-
-const heroVideoUrl = ''
+function mapCarouselToItem(item: Awaited<ReturnType<typeof getIndexMaterial>>['carouselList'][number], index: number): HomeCarouselItem {
+  return {
+    id: item.id,
+    fileType: item.fileType,
+    videoUrl: item.fileType === 1 ? item.fileUrl : '',
+    poster: item.fileType === 0 ? item.fileUrl : '/static/images/home/free_xfgz.png',
+    title: FALLBACK_ITEMS[index]?.title ?? FALLBACK_ITEMS[index % FALLBACK_ITEMS.length]?.title ?? 'AI 自由家',
+    sub: FALLBACK_ITEMS[index]?.sub ?? FALLBACK_ITEMS[index % FALLBACK_ITEMS.length]?.sub ?? '精选家居随心换',
+  }
+}
 
 onLoad(async () => {
   console.log('首页已加载')
   // await checkAndLogin()
-})
 
-onUnmounted(() => {
-  heroVideoReady.value = false
-  heroVideoErrorCount.value = 0
+  try {
+    const data = await getIndexMaterial()
+    console.log(data)
+    const sortedList = [...(data.carouselList ?? [])].sort((left, right) => left.sort - right.sort)
+    if (sortedList.length > 0) {
+      carouselItems.value = sortedList.map(mapCarouselToItem)
+    }
+  }
+  catch {
+    carouselItems.value = FALLBACK_ITEMS
+  }
 })
 
 function onTryClick() {
@@ -55,29 +64,6 @@ function onSettingClick() {
 function onCardClick(name: string) {
   uni.showToast({ title: `${name}功能待接入`, icon: 'none' })
 }
-
-function onHeroVideoLoaded() {
-  heroVideoReady.value = true
-  heroVideoErrorCount.value = 0
-}
-
-function onHeroVideoEnded() {
-  heroVideoReady.value = false
-  heroTextVisible.value = false
-  setTimeout(() => {
-    heroVideoIndex.value = (heroVideoIndex.value + 1) % heroVideoPaths.length
-    heroTextVisible.value = true
-  }, 280)
-}
-
-function onHeroVideoError() {
-  heroVideoReady.value = false
-  heroVideoErrorCount.value += 1
-  if (heroVideoErrorCount.value >= heroVideoPaths.length) {
-    return
-  }
-  heroVideoIndex.value = (heroVideoIndex.value + 1) % heroVideoPaths.length
-}
 </script>
 
 <template>
@@ -86,34 +72,17 @@ function onHeroVideoError() {
   <!-- #endif -->
 
   <!-- 整页容器 -->
-  <view class="h-screen flex flex-col overflow-hidden bg-[#f8f5f0]">
+  <view class="home-shell flex flex-col overflow-hidden bg-[#f8f5f0]">
     <!-- ===== Hero ===== -->
     <view class="hero relative overflow-hidden">
-      <image :src="heroPoster" mode="aspectFill" class="hero-poster absolute left-0 top-0 h-full w-full" :class="{ 'hero-poster--hidden': heroVideoReady }" />
-
-      <video
-        :key="heroVideoUrl"
-        :src="heroVideoUrl"
-        class="hero-video absolute left-0 top-0 h-full w-full"
-        :class="{ 'hero-video--ready': heroVideoReady }"
-        muted
-        autoplay
-        playsinline
-        webkit-playsinline
-        :show-center-play-btn="false"
-        :controls="false"
-        object-fit="cover"
-        @loadedmetadata="onHeroVideoLoaded"
-        @ended="onHeroVideoEnded"
-        @error="onHeroVideoError"
+      <!-- 轮播组件 -->
+      <HeroCarousel
+        :items="carouselItems"
+        class="absolute left-0 top-0 h-full w-full"
+        @try="onTryClick"
       />
 
-      <!-- 渐变遮罩 -->
-      <view class="hero-mask absolute left-0 top-0 h-full w-full" />
-      <view class="hero-bottom-fade absolute bottom-0 left-0 right-0 z-[4]" />
-      <view class="hero-bottom-halo absolute bottom-[18rpx] left-1/2 z-[4] h-[420rpx] w-[420rpx] -translate-x-1/2" />
-
-      <!-- 设置按钮：left-top 玻璃态，hover 缩放 -->
+      <!-- 设置按钮：叠加在轮播上方，left-top 玻璃态，hover 缩放 -->
       <view
         class="setting-btn"
         hover-class="setting-btn--press"
@@ -122,28 +91,6 @@ function onHeroVideoError() {
       >
         <text class="text-[26rpx] text-[#4a3820] leading-none">⚙</text>
         <text class="text-[26rpx] text-[#2a1e0e] font-medium tracking-[1rpx]">设置</text>
-      </view>
-
-      <!-- 主标题区 -->
-      <view
-        class="hero-text-wrap absolute bottom-0 left-0 right-0 z-[5] flex flex-col items-center px-[48rpx] pb-[148rpx]"
-        :class="{ 'hero-text--hidden': !heroTextVisible }"
-      >
-        <text class="hero-title text-center text-[76rpx] font-extrabold leading-[1.1] tracking-[8rpx]">
-          {{ heroTitle }}
-        </text>
-        <text class="hero-sub mt-[16rpx] text-center text-[30rpx] tracking-[2rpx]">
-          {{ heroSub }}
-        </text>
-        <view
-          class="hero-cta"
-          hover-class="hero-cta--press"
-          :hover-stay-time="120"
-          @click="onTryClick"
-        >
-          <text class="text-[30rpx]">✨</text>
-          <text class="text-[34rpx] text-white font-semibold tracking-[2rpx]">去试试</text>
-        </view>
       </view>
     </view>
 
@@ -225,64 +172,16 @@ page {
 </style>
 
 <style lang="scss" scoped>
-/* Hero 高度（flex shorthand 无法用工具类精确表达） */
+.home-shell {
+  height: calc(100vh - constant(safe-area-inset-bottom) - 50rpx);
+  height: calc(100vh - env(safe-area-inset-bottom) - 50rpx);
+  min-height: calc(100dvh - env(safe-area-inset-bottom) - 50rpx);
+}
+
+/* Hero 容器高度 */
 .hero {
-  flex: 0 0 70vh;
+  flex: 0 0 67vh;
   background: #c4b09a;
-}
-
-.hero-video {
-  opacity: 0;
-  transition: opacity 0.35s ease;
-}
-
-.hero-video-preload {
-  position: absolute;
-  top: -9999rpx;
-  left: -9999rpx;
-  width: 1rpx;
-  height: 1rpx;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero-video--ready {
-  opacity: 1;
-}
-
-.hero-poster {
-  transition: opacity 0.4s ease;
-}
-
-.hero-poster--hidden {
-  opacity: 0;
-}
-
-/* 多段渐变遮罩 */
-.hero-mask {
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0.5) 100%);
-}
-
-.hero-bottom-fade {
-  height: 210rpx;
-  background: linear-gradient(
-    to bottom,
-    rgba(248, 245, 240, 0) 0%,
-    rgba(248, 245, 240, 0.08) 26%,
-    rgba(248, 245, 240, 0.34) 54%,
-    rgba(248, 245, 240, 0.82) 84%,
-    #f8f5f0 100%
-  );
-}
-
-.hero-bottom-halo {
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.92) 0%,
-    rgba(248, 245, 240, 0.58) 42%,
-    rgba(248, 245, 240, 0) 100%
-  );
-  filter: blur(12rpx);
 }
 
 /* 设置按钮：玻璃态 + 悬停 */
@@ -304,49 +203,6 @@ page {
 
 .setting-btn--press {
   transform: scale(0.96);
-}
-
-/* 主标题区切换过渡 */
-.hero-text-wrap {
-  transition:
-    opacity 0.28s ease,
-    transform 0.28s ease;
-}
-
-.hero-text--hidden {
-  opacity: 0;
-  transform: translateY(12rpx);
-}
-
-/* 主标题样式 */
-.hero-title {
-  color: #1a1208;
-  text-shadow: 0 2rpx 8rpx rgba(255, 255, 255, 0.6);
-}
-
-.hero-sub {
-  color: rgba(30, 20, 10, 0.82);
-  text-shadow: 0 1rpx 4rpx rgba(255, 255, 255, 0.5);
-}
-
-/* CTA 按钮 */
-.hero-cta {
-  margin-top: 48rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  padding: 20rpx 52rpx;
-  background: linear-gradient(135deg, #d4a574 0%, #b88a5e 100%);
-  border-radius: 44rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.hero-cta--press {
-  transform: scale(0.96);
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.2);
 }
 
 /* 卡片区域 */
