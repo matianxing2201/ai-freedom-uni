@@ -1,9 +1,8 @@
 import type { IUserInfoRes } from '@/api/types/login'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {
-  getUserInfo,
-} from '@/api/login'
+
+import { queryUserInfo, toUserInfoRes } from '@/api/me'
 
 // 初始化状态
 const userInfoState: IUserInfoRes = {
@@ -42,9 +41,10 @@ export const useUserStore = defineStore(
      * 获取用户信息
      */
     const fetchUserInfo = async () => {
-      const res = await getUserInfo()
-      setUserInfo(res)
-      return res
+      const res = await queryUserInfo()
+      const mappedUserInfo = toUserInfoRes(res)
+      setUserInfo(mappedUserInfo)
+      return mappedUserInfo
     }
 
     return {
